@@ -147,9 +147,13 @@ def draw_cv2(bgr_images, labels, boxes, scores, ratios, paddings, thrh=0.4):
             # simple filled background
             (tw, th), baseline = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)
             ty1 = max(0, y1 - th - baseline - 6)
-            cv2.rectangle(img, (x1, ty1), (x1 + tw + 6, ty1 + th + baseline + 6), (0, 255, 0), -1)
+            # background
+            cv2.rectangle(img, (x1, ty1), (x1 + tw + 6, ty1 + th + baseline + 6), color, -1)
+
+            # text in same color (slightly darker for contrast)
+            text_color = tuple(max(0, c - 40) for c in color)
             cv2.putText(img, text, (x1 + 3, ty1 + th + 3),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 2, cv2.LINE_AA)
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, text_color, 2, cv2.LINE_AA)
 
         result_images.append(img)
     return result_images
