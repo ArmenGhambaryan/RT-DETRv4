@@ -321,6 +321,7 @@ If you'd like to train **RT-DETRv4** on COCO2017 with an input size of 320x320, 
 
     ```shell
     python tools/deployment/export_onnx.py --check -c configs/rtv4/rtv4_hgnetv2_${model}_coco.yml -r model.pth
+    python tools/deployment/export_onnx.py --check -c configs/rtv4/rtv4_hgnetv2_m_coco.yml -r downloads/RTv4-M-hgnet.pth --simplify
     ```
 
 3.  Export [tensorrt](https://docs.nvidia.com/deeplearning/tensorrt/install-guide/index.html)
