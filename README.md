@@ -346,6 +346,7 @@ If you'd like to train **RT-DETRv4** on COCO2017 with an input size of 320x320, 
 
     ```shell
     python tools/inference/onnx_inf.py --onnx model.onnx --input image.jpg  # or video.mp4
+    python tools/inference/onnx_inf.py --onnx downloads/RTv4-M-hgnet.onnx --input downloads/demo.mkv
     python tools/inference/trt_inf.py --trt model.engine --input image.jpg
     python tools/inference/torch_inf.py -c configs/rtv4/rtv4_hgnetv2_${model}_coco.yml -r model.pth --input image.jpg --device cuda:0
     ```

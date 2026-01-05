@@ -9,6 +9,56 @@ import onnxruntime as ort
 from PIL import Image, ImageDraw
 import cv2
 
+# COCO 80-class names (index = class id)
+COCO80 = [
+    "person","bicycle","car","motorcycle","airplane","bus","train","truck","boat","traffic light",
+    "fire hydrant","stop sign","parking meter","bench","bird","cat","dog","horse","sheep","cow",
+    "elephant","bear","zebra","giraffe","backpack","umbrella","handbag","tie","suitcase","frisbee",
+    "skis","snowboard","sports ball","kite","baseball bat","baseball glove","skateboard","surfboard","tennis racket","bottle",
+    "wine glass","cup","fork","knife","spoon","bowl","banana","apple","sandwich","orange",
+    "broccoli","carrot","hot dog","pizza","donut","cake","chair","couch","potted plant","bed",
+    "dining table","toilet","tv","laptop","mouse","remote","keyboard","cell phone","microwave","oven",
+    "toaster","sink","refrigerator","book","clock","vase","scissors","teddy bear","hair drier","toothbrush"
+]
+
+def color_for_class(cls_id: int):
+    # Deterministic bright colors
+    np.random.seed(cls_id + 12345)
+    color = np.random.randint(64, 255, size=3).tolist()
+    return (int(color[0]), int(color[1]), int(color[2]))
+
+def coco_name(lbl: int) -> str:
+    return COCO80[lbl] if 0 <= lbl < len(COCO80) else str(lbl)
+
+def draw_rounded_rectangle(image, top_left, bottom_right, color=(0, 255, 0),
+                           thickness=5, radius_ratio=0.1, coeff=0.25):
+    x1, y1 = top_left
+    x2, y2 = bottom_right
+    width, height = x2 - x1, y2 - y1
+    radius = int(radius_ratio * max(width, height))
+    thickness = min(thickness, radius if radius > 0 else thickness)
+
+    w_d = int(width * coeff)
+    h_d = int(height * coeff)
+
+    cv2.line(image, (x1 + radius, y1), (x1 + w_d, y1), color, thickness)
+    cv2.line(image, (x2 - w_d, y1), (x2 - radius, y1), color, thickness)
+
+    cv2.line(image, (x1 + radius, y2), (x1 + w_d, y2), color, thickness)
+    cv2.line(image, (x2 - w_d, y2), (x2 - radius, y2), color, thickness)
+
+    cv2.line(image, (x1, y1 + radius), (x1, y1 + h_d), color, thickness)
+    cv2.line(image, (x1, y2 - h_d), (x1, y2 - radius), color, thickness)
+
+    cv2.line(image, (x2, y1 + radius), (x2, y1 + h_d), color, thickness)
+    cv2.line(image, (x2, y2 - h_d), (x2, y2 - radius), color, thickness)
+
+    if radius > 0:
+        cv2.ellipse(image, (x1 + radius, y1 + radius), (radius, radius), 180, 0, 90, color, thickness)
+        cv2.ellipse(image, (x2 - radius, y1 + radius), (radius, radius), 270, 0, 90, color, thickness)
+        cv2.ellipse(image, (x1 + radius, y2 - radius), (radius, radius), 90, 0, 90, color, thickness)
+        cv2.ellipse(image, (x2 - radius, y2 - radius), (radius, radius), 0, 0, 90, color, thickness)
+
 
 def resize_with_aspect_ratio(image, size, interpolation=Image.BILINEAR):
     """Resizes an image while maintaining aspect ratio and pads it."""
@@ -50,6 +100,60 @@ def draw(images, labels, boxes, scores, ratios, paddings, thrh=0.4):
         result_images.append(im)
     return result_images
 
+def draw_cv2(bgr_images, labels, boxes, scores, ratios, paddings, thrh=0.4):
+    """
+    bgr_images: list[np.ndarray] BGR images (OpenCV)
+    labels/boxes/scores: ONNX outputs (batch-first)
+    ratios: list[float]
+    paddings: list[(pad_w, pad_h)]
+    """
+    result_images = []
+    for i, img in enumerate(bgr_images):
+        scr = scores[i]
+        keep = scr > thrh
+
+        lab = labels[i][keep]
+        box = boxes[i][keep]
+        scr = scr[keep]
+
+        ratio = float(ratios[i])
+        pad_w, pad_h = paddings[i]
+
+        for lbl, bb, s in zip(lab, box, scr):
+            lbl_i = int(lbl)  # ORT returns numpy scalar/float sometimes
+            name = coco_name(lbl_i)
+
+            # Map boxes back to original image coordinates (undo pad + scale)
+            x1 = int(round((float(bb[0]) - pad_w) / ratio))
+            y1 = int(round((float(bb[1]) - pad_h) / ratio))
+            x2 = int(round((float(bb[2]) - pad_w) / ratio))
+            y2 = int(round((float(bb[3]) - pad_h) / ratio))
+
+            # Clip to image
+            h, w = img.shape[:2]
+            x1 = max(0, min(w - 1, x1))
+            y1 = max(0, min(h - 1, y1))
+            x2 = max(0, min(w - 1, x2))
+            y2 = max(0, min(h - 1, y2))
+            if x2 <= x1 or y2 <= y1:
+                continue
+
+            # Rounded rectangle
+            color = color_for_class(lbl_i)
+            draw_rounded_rectangle(img, (x1, y1), (x2, y2), color=color, thickness=3)
+
+            # Label text
+            text = f"{name} {float(s):.2f}"
+            # simple filled background
+            (tw, th), baseline = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)
+            ty1 = max(0, y1 - th - baseline - 6)
+            cv2.rectangle(img, (x1, ty1), (x1 + tw + 6, ty1 + th + baseline + 6), (0, 255, 0), -1)
+            cv2.putText(img, text, (x1 + 3, ty1 + th + 3),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 2, cv2.LINE_AA)
+
+        result_images.append(img)
+    return result_images
+
 
 def process_image(sess, im_pil):
     # Resize image while preserving aspect ratio
@@ -68,12 +172,16 @@ def process_image(sess, im_pil):
 
     labels, boxes, scores = output
 
-    result_images = draw(
-        [im_pil], labels, boxes, scores,
+    # Convert original PIL image to OpenCV BGR
+    bgr = cv2.cvtColor(np.array(im_pil), cv2.COLOR_RGB2BGR)
+
+    out_imgs = draw_cv2(
+        [bgr], labels, boxes, scores,
         [ratio], [(pad_w, pad_h)]
     )
-    result_images[0].save('onnx_result.jpg')
-    print("Image processing complete. Result saved as 'result.jpg'.")
+
+    cv2.imwrite("onnx_result.jpg", out_imgs[0])
+    print("Image processing complete. Result saved as 'onnx_result.jpg'.")
 
 
 def process_video(sess, video_path):
@@ -113,16 +221,16 @@ def process_video(sess, video_path):
         )
 
         labels, boxes, scores = output
-
-        # Draw detections on the original frame
-        result_images = draw(
-            [frame_pil], labels, boxes, scores,
+    
+        # Draw directly on the original OpenCV BGR frame
+        out_frames = draw_cv2(
+            [frame], labels, boxes, scores,
             [ratio], [(pad_w, pad_h)]
         )
-        frame_with_detections = result_images[0]
+        frame = out_frames[0]
 
-        # Convert back to OpenCV image
-        frame = cv2.cvtColor(np.array(frame_with_detections), cv2.COLOR_RGB2BGR)
+        # # Convert back to OpenCV image
+        # frame = cv2.cvtColor(np.array(frame_with_detections), cv2.COLOR_RGB2BGR)
 
         # Write the frame
         out.write(frame)
@@ -139,7 +247,8 @@ def process_video(sess, video_path):
 def main(args):
     """Main function."""
     # Load the ONNX model
-    sess = ort.InferenceSession(args.onnx)
+    providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
+    sess = ort.InferenceSession(args.onnx, providers=providers)
     print(f"Using device: {ort.get_device()}")
 
     input_path = args.input
