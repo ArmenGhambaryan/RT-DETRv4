@@ -411,7 +411,12 @@ If you'd like to train **RT-DETRv4** on COCO2017 with an input size of 320x320, 
 
 </details>
 
-## 4\. Citation
+## 4\. Docker deployment
+```shell
+docker run -it --rm --gpus all --shm-size=8g --ulimit memlock=-1 --ulimit stack=67108864 -v $(pwd):/workspace raptor_det:latest
+```
+
+## 5\. Citation
 
 If you find this work helpful, please consider citing:
 
@@ -424,7 +429,7 @@ If you find this work helpful, please consider citing:
 }
 ```
 
-## 5\. Acknowledgement
+## 6\. Acknowledgement
 
 Our work is built upon [RT-DETR](https://github.com/lyuwenyu/RT-DETR), [D-FINE](https://github.com/Peterande/D-FINE), [DEIM](https://github.com/Intellindust-AI-Lab/DEIM) and Teacher Model [DINOv3](https://github.com/facebookresearch/dinov3).
 Thanks to these remarkable works!

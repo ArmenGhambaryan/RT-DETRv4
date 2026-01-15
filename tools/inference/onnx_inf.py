@@ -100,7 +100,7 @@ def draw(images, labels, boxes, scores, ratios, paddings, thrh=0.4):
         result_images.append(im)
     return result_images
 
-def draw_cv2(bgr_images, labels, boxes, scores, ratios, paddings, thrh=0.4):
+def draw_cv2(bgr_images, labels, boxes, scores, ratios, paddings, thrh=0.2):
     """
     bgr_images: list[np.ndarray] BGR images (OpenCV)
     labels/boxes/scores: ONNX outputs (batch-first)
@@ -225,6 +225,7 @@ def process_video(sess, video_path):
         )
 
         labels, boxes, scores = output
+        # print(sum(scores[0] > 0.1))
     
         # Draw directly on the original OpenCV BGR frame
         out_frames = draw_cv2(
